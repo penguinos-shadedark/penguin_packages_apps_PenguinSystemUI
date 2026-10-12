@@ -17,10 +17,6 @@
 package com.android.systemui.qs.ui.composable
 
 import android.content.res.Configuration
-import android.database.ContentObserver
-import android.os.Handler
-import android.os.Looper
-import android.provider.Settings
 import android.view.ContextThemeWrapper
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
@@ -52,7 +48,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -100,6 +95,7 @@ import com.android.systemui.qs.composefragment.PenguinMediaCard
 import com.android.systemui.qs.composefragment.VolumeLayout
 import com.android.systemui.qs.composefragment.connectivityFolderEnabled
 import com.android.systemui.qs.composefragment.connectivityFolderSpecs
+import com.android.systemui.qs.composefragment.secureSetting
 import com.android.systemui.qs.panels.ui.compose.FOLDER_SPEC
 import com.android.systemui.qs.panels.ui.compose.MEDIA_SPEC
 import com.android.systemui.qs.panels.ui.compose.PenguinGrid
@@ -815,19 +811,4 @@ internal fun PageIcons(
     }
 }
 
-@Composable
-internal fun secureStringSetting(key: String): String? {
-    val resolver = LocalContext.current.contentResolver
-    var value by remember(key) { mutableStateOf(Settings.Secure.getString(resolver, key)) }
-    DisposableEffect(resolver, key) {
-        val observer =
-            object : ContentObserver(Handler(Looper.getMainLooper())) {
-                override fun onChange(selfChange: Boolean) {
-                    value = Settings.Secure.getString(resolver, key)
-                }
-            }
-        resolver.registerContentObserver(Settings.Secure.getUriFor(key), false, observer)
-        onDispose { resolver.unregisterContentObserver(observer) }
-    }
-    return value
-}
+@Composable internal fun secureStringSetting(key: String): String? = secureSetting(key)

@@ -48,7 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -162,22 +162,39 @@ const val SETTING_QS_SLIDERS_SPAN = "qs_sliders_span"
 const val DEFAULT_SLIDERS_SPAN = 2
 const val SETTING_QS_MEDIA_STYLE = "qs_media_style"
 
-@Composable
-fun secureIntSetting(key: String, default: Int): Int {
-    val resolver = LocalContext.current.contentResolver
-    var value by remember(key) { mutableStateOf(Settings.Secure.getInt(resolver, key, default)) }
-    DisposableEffect(resolver, key) {
-        val observer =
-            object : ContentObserver(Handler(Looper.getMainLooper())) {
-                override fun onChange(selfChange: Boolean) {
-                    value = Settings.Secure.getInt(resolver, key, default)
-                }
+// One observer per key for the life of the process, however many panel elements read it and
+// however often the panel opens: registering one is a call into system_server each time.
+private object SecureSettingStates {
+    private val states = HashMap<String, State<String?>>()
+
+    fun of(context: Context, key: String): State<String?> =
+        synchronized(states) {
+            states.getOrPut(key) {
+                val resolver = (context.applicationContext ?: context).contentResolver
+                val state = mutableStateOf(Settings.Secure.getString(resolver, key))
+                resolver.registerContentObserver(
+                    Settings.Secure.getUriFor(key),
+                    false,
+                    object : ContentObserver(Handler(Looper.getMainLooper())) {
+                        override fun onChange(selfChange: Boolean) {
+                            state.value = Settings.Secure.getString(resolver, key)
+                        }
+                    },
+                )
+                state
             }
-        resolver.registerContentObserver(Settings.Secure.getUriFor(key), false, observer)
-        onDispose { resolver.unregisterContentObserver(observer) }
-    }
-    return value
+        }
 }
+
+@Composable
+internal fun secureSetting(key: String): String? {
+    val context = LocalContext.current
+    return remember(key) { SecureSettingStates.of(context, key) }.value
+}
+
+@Composable
+fun secureIntSetting(key: String, default: Int): Int =
+    secureSetting(key)?.toIntOrNull() ?: default
 
 @Composable
 fun effectiveQsPanelStyle(): QsPanelStyle =
@@ -192,42 +209,24 @@ fun connectivityFolderSpecs(): List<String> {
     return large + small
 }
 
-private fun readSpecs(
-    resolver: ContentResolver,
-    key: String,
-    fallback: List<String>,
-): List<String> {
-    val raw = Settings.Secure.getString(resolver, key) ?: return fallback
+private fun parseSpecs(raw: String?, fallback: List<String>): List<String> {
+    raw ?: return fallback
     val parsed = raw.split(',').map { it.trim() }.filter { it.isNotEmpty() }
     return parsed.ifEmpty { fallback }
 }
 
-private fun current(resolver: ContentResolver): Pair<List<String>, List<String>> =
-    promoteByUsage(
-        readSpecs(resolver, SETTING_QS_FOLDER_LARGE, ConnectivityFolderSpecs.Large),
-        readSpecs(resolver, SETTING_QS_FOLDER_SMALL, ConnectivityFolderSpecs.Small),
-        parseUsage(Settings.Secure.getString(resolver, SETTING_QS_FOLDER_USAGE)),
-    )
-
 @Composable
 private fun folderSpecs(): Pair<List<String>, List<String>> {
-    val resolver = LocalContext.current.contentResolver
-    var specs by remember {
-        mutableStateOf(current(resolver))
+    val large = secureSetting(SETTING_QS_FOLDER_LARGE)
+    val small = secureSetting(SETTING_QS_FOLDER_SMALL)
+    val usage = secureSetting(SETTING_QS_FOLDER_USAGE)
+    return remember(large, small, usage) {
+        promoteByUsage(
+            parseSpecs(large, ConnectivityFolderSpecs.Large),
+            parseSpecs(small, ConnectivityFolderSpecs.Small),
+            parseUsage(usage),
+        )
     }
-    DisposableEffect(resolver) {
-        val observer =
-            object : ContentObserver(Handler(Looper.getMainLooper())) {
-                override fun onChange(selfChange: Boolean) {
-                    specs = current(resolver)
-                }
-            }
-        listOf(SETTING_QS_FOLDER_LARGE, SETTING_QS_FOLDER_SMALL, SETTING_QS_FOLDER_USAGE).forEach {
-            resolver.registerContentObserver(Settings.Secure.getUriFor(it), false, observer)
-        }
-        onDispose { resolver.unregisterContentObserver(observer) }
-    }
-    return specs
 }
 
 private val LargeCircle = 56.dp
@@ -672,29 +671,7 @@ internal fun Context.folderIcon(icon: IconProvider): Icon {
 const val SETTING_QS_CONNECTIVITY_FOLDER = "qs_connectivity_folder"
 
 @Composable
-fun connectivityFolderEnabled(): Boolean {
-    val resolver = LocalContext.current.contentResolver
-    var enabled by remember {
-        mutableStateOf(
-            Settings.Secure.getInt(resolver, SETTING_QS_CONNECTIVITY_FOLDER, 1) != 0
-        )
-    }
-    DisposableEffect(resolver) {
-        val observer =
-            object : ContentObserver(Handler(Looper.getMainLooper())) {
-                override fun onChange(selfChange: Boolean) {
-                    enabled = Settings.Secure.getInt(resolver, SETTING_QS_CONNECTIVITY_FOLDER, 1) != 0
-                }
-            }
-        resolver.registerContentObserver(
-            Settings.Secure.getUriFor(SETTING_QS_CONNECTIVITY_FOLDER),
-            false,
-            observer,
-        )
-        onDispose { resolver.unregisterContentObserver(observer) }
-    }
-    return enabled
-}
+fun connectivityFolderEnabled(): Boolean = secureIntSetting(SETTING_QS_CONNECTIVITY_FOLDER, 1) != 0
 
 internal fun TileViewModel.primaryAction(uiState: TileUiState) {
     if (uiState.handlesToggleClick) toggleClick() else mainClick(null)
