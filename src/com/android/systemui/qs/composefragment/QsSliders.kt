@@ -313,9 +313,12 @@ fun VolumeLayout(
     var currentVolume by remember { mutableStateOf(0) }
 
     val maxVolume = remember { audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC) }
+    // The step last asked for, so a drag only reaches AudioService when it moves to a new one.
+    val requestedVolume = remember { intArrayOf(-1) }
 
     val updateVolumeState = {
         currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+        requestedVolume[0] = currentVolume
         sliderValue = currentVolume.toFloat() / maxVolume.toFloat()
         isMuted = audioManager.isStreamMute(AudioManager.STREAM_MUSIC) || currentVolume == 0
     }
@@ -341,7 +344,10 @@ fun VolumeLayout(
     val onValueChanged = { newProgress: Float ->
         sliderValue = newProgress
         val newVolume = (newProgress * maxVolume).roundToInt()
-        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newVolume, 0)
+        if (newVolume != requestedVolume[0]) {
+            requestedVolume[0] = newVolume
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newVolume, 0)
+        }
         Unit
     }
 
