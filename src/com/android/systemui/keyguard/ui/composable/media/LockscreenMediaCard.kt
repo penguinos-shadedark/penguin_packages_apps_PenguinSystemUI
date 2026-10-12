@@ -84,8 +84,8 @@ import com.android.systemui.media.remedia.ui.viewmodel.MediaNavigationViewModel
 import com.android.systemui.media.remedia.ui.viewmodel.MediaSecondaryActionViewModel
 import com.android.systemui.media.remedia.ui.viewmodel.MediaViewModel
 import com.android.systemui.qs.shared.style.LiquidGlassSurface
-import com.android.systemui.qs.shared.style.glassRim
 import com.android.systemui.qs.shared.style.liquidGlassEnabled
+import com.android.systemui.qs.shared.style.liquidGlassRim
 import com.android.systemui.res.R
 
 private val CardCorner = 28.dp
@@ -168,7 +168,11 @@ private fun MediaCard(card: MediaCardViewModel, isSelected: Boolean) {
                 .background(
                     lerpColor(if (glass) LiquidGlassSurface else CompactGlass, SmokyGlass, f)
                 )
-                .glassRim(RoundedCornerShape(CardCorner))
+                // The blur behind the card is WallpaperBlur's; a second region would double it.
+                .then(
+                    if (glass) Modifier.liquidGlassRim(RoundedCornerShape(CardCorner))
+                    else Modifier
+                )
         )
         Column(
             modifier =
