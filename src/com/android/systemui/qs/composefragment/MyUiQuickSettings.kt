@@ -49,6 +49,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -60,6 +61,7 @@ import com.android.systemui.qs.panels.ui.compose.TileListener
 import com.android.systemui.qs.panels.ui.viewmodel.TileViewModel
 import com.android.systemui.qs.shared.style.glassPress
 import com.android.systemui.qs.shared.style.glassRim
+import com.android.systemui.res.R
 
 internal val LocalMyUiInteractive = compositionLocalOf { true }
 
@@ -149,7 +151,12 @@ private fun MyUiCardRow(tile: TileViewModel) {
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = uiState.secondaryLabel.ifBlank { if (active) "On" else "Off" },
+                text =
+                    uiState.secondaryLabel.ifBlank {
+                        stringResource(
+                            if (active) R.string.switch_bar_on else R.string.switch_bar_off
+                        )
+                    },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
