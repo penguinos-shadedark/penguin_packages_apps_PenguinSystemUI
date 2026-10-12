@@ -311,6 +311,10 @@ public class SlideToActView extends FrameLayout {
 
     private void restartShimmer() {
         stopShimmer();
+        // The settle animation can end after the dialog has closed, when nothing would stop this.
+        if (!isAttachedToWindow()) {
+            return;
+        }
         final float width = mLabel.getWidth();
         if (width <= 0f || mLabel.length() == 0) {
             return;
