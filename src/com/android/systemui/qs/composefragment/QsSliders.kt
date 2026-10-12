@@ -430,6 +430,13 @@ fun BrightnessLayout(
 
     var sliderValue by remember { mutableFloatStateOf(0f) }
     var isAuto by remember { mutableStateOf(false) }
+    // The range brightness is mapped onto, kept so that a drag does not ask system_server for
+    // it on every step. NaN until it has been read.
+    val brightnessRange = remember { floatArrayOf(Float.NaN, Float.NaN) }
+    val keepRange = { info: BrightnessInfo ->
+        brightnessRange[0] = info.brightnessMinimum
+        brightnessRange[1] = info.brightnessMaximum
+    }
 
     val updateBrightnessState = {
         isAuto = Settings.System.getInt(
@@ -439,6 +446,7 @@ fun BrightnessLayout(
         ) == Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC
 
         val info: BrightnessInfo? = context.display?.getBrightnessInfo()
+        info?.let(keepRange)
         val newBrightness = info?.let {
             val value = convertLinearToGammaFloat(it.brightness, it.brightnessMinimum, it.brightnessMaximum)
             val range = GAMMA_SPACE_MAX - GAMMA_SPACE_MIN
@@ -483,14 +491,16 @@ fun BrightnessLayout(
 
     val onValueChanged = { newProgress: Float ->
         sliderValue = newProgress
-        val info: BrightnessInfo? = context.display?.getBrightnessInfo()
-        info?.let {
+        if (brightnessRange[0].isNaN()) context.display?.getBrightnessInfo()?.let(keepRange)
+        val minimum = brightnessRange[0]
+        val maximum = brightnessRange[1]
+        if (!minimum.isNaN()) {
             val linear = convertGammaToLinearFloat(
                 (newProgress * GAMMA_SPACE_MAX).roundToInt(),
-                it.brightnessMinimum,
-                it.brightnessMaximum
+                minimum,
+                maximum
             )
-            val brightnessValue = linear.coerceIn(it.brightnessMinimum, it.brightnessMaximum)
+            val brightnessValue = linear.coerceIn(minimum, maximum)
             displayManager.setTemporaryBrightness(context.displayId, brightnessValue)
         }
         Unit
@@ -499,6 +509,7 @@ fun BrightnessLayout(
     val onValueChangeFinished = { finalProgress: Float ->
         val info: BrightnessInfo? = context.display?.getBrightnessInfo()
         info?.let {
+            keepRange(it)
             val linear = convertGammaToLinearFloat(
                 (finalProgress * GAMMA_SPACE_MAX).roundToInt(),
                 it.brightnessMinimum,
